@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Document</title>
+  <link rel="stylesheet" href="./css/reset.min.css">
+  <style>
+    .timeBox {
+      margin: 20px auto;
+      width: 300px;
+      height: 50px;
+      line-height: 50px;
+      font-size: 20px;
+      text-align: center;
+      border: 1px solid lightblue;
+    }
+
+    .timeBox span {
+      color: red;
+      font-weight: bolder;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="timeBox">距离抢购还剩：<span>-- : -- : --</span></div>
+  <script>
+    let timeBox = document.querySelector('.timeBox'),
+      timeSpan = timeBox.querySelector('span'),
+      autoTime = null,
+      _serverTimer = null;
+    // 从服务器获取时间(获取相应头中的时间信息即可)
+    let queryTime = function queryTime() {
+      // 从服务器端获取时间会存在一个问题：由于服务器端返回数据需要时间，所以客户端拿到返回的"服务器时间"的时候，已经过去一会了，导致获取的时间和真实的时间是有一定误差的，这个误差越小越好，那么如何减少误差：
+      // 1. 在ajax状态为2的时候就从相应头中获取信息，而不是等到更靠后的状态4
+      // 2. 请求方式设置head：只获取相应头信息即可，相应主体内容不需要
+      // 3. 特殊：即使我们向服务器发送一个不存在的请求地址，返回的是404状态码，但是相应头信息中都会存在服务器的时间(不建议使用，不友好)
+      return new Promise(reslove => {
+        // 已经第二次执行该方法了，用之前记录的全局变量值，但是需要把这个值手动累加一秒
+        if (_serverTimer) {
+          _serverTimer = new Date(_serverTimer.getTime() + 1000);
+          reslove(_serverTimer);
+          return;
+        }
+        // 第一次向服务器发起请求，把获取的结果存储到全局变量中
+        let xhr = new XMLHttpRequest(),
+          serverTime = null;
+        xhr.open('get', 'json/data.json');
+        xhr.onreadystatechange = function () {
+          if (xhr.readyState === 2) {
+            serverTime = new Date(xhr.getResponseHeader('date'));
+            _serverTimer = serverTime;
+            reslove(serverTime);
+          }
+        };
+        xhr.send(null);
+      })
+    };
+    let computedTime = function computedTime() {
+      // 这样处理也有一个问题：一个客户端每间隔一秒都会向服务器发送一个新的请求，这样下去访问用户多，服务器就爆了(超过负载均衡)
+      // 解决方案：创建一个全局变量，记录第一次从后台获取的服务器时间，每一秒刷新的时候，都是在第一次的基础上一直累加一秒，而不是重新从服务器获取时间(减轻服务器的压力)
+      let promise = queryTime();
+      promise.then(serverTime => {
+        let nowTime = serverTime,
+          tarTime = new Date('2019/01/26 22:00:00'),
+          diffTime = tarTime - nowTime;
+        if (diffTime >= 0) {
+          let hours = Math.floor(diffTime / (1000 * 60 * 60));
+          diffTime = diffTime - hours * 1000 * 60 * 60;
+          let minutes = Math.floor(diffTime / (1000 * 60));
+          diffTime = diffTime - minutes * 1000 * 60;
+          let seconds = Math.floor(diffTime / 1000);
+          hours < 10 ? hours = '0' + hours : null;
+          minutes < 10 ? minutes = '0' + minutes : null;
+          seconds < 10 ? seconds = '0' + seconds : null;
+          timeSpan.innerHTML = `${hours} : ${minutes} : ${seconds}`;
+          return;
+        }
+        timeSpan.innerHTML = '-- : -- : --';
+        clearInterval(autoTime);
+      })
+    };
+    /* let computedTime = function computedTime() {
+      // 获取当前时间和目标时间的差值(结果是两个时间相差的毫秒差)
+      // new Date() 获取当前客户端本地时间(是标准的时间格式数据->对象)
+      let nowTime = new Date(),
+        // new Date('2019/01/26 22:00:00') 把指定的时间字符串转换为标准时间数据，时间字符串支持很多格式
+        tarTime = new Date('2019/01/26 22:00:00'),
+        diffTime = tarTime - nowTime;
+      // 计算出对应的时、分、秒
+      if (diffTime >= 0) {
+        let hours = Math.floor(diffTime / (1000 * 60 * 60));
+        diffTime = diffTime - hours * 1000 * 60 * 60;
+        let minutes = Math.floor(diffTime / (1000 * 60));
+        diffTime = diffTime - minutes * 1000 * 60;
+        let seconds = Math.floor(diffTime / 1000);
+        hours < 10 ? hours = '0' + hours : null;
+        minutes < 10 ? minutes = '0' + minutes : null;
+        seconds < 10 ? seconds = '0' + seconds : null;
+        timeSpan.innerHTML = `${hours} : ${minutes} : ${seconds}`;
+        return;
+      }
+      // 已经到达抢购时间了
+      timeSpan.innerHTML = '-- : -- : --';
+      clearInterval(autoTime);
+    }; */
+    computedTime();
+    autoTime = setInterval(computedTime, 1000);
+  </script>
+</body>
+
+</html>
